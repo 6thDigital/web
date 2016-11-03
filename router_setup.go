@@ -1,6 +1,7 @@
 package web
 
 import (
+	"net/url"
 	"reflect"
 	"strings"
 )
@@ -64,11 +65,27 @@ type GenericMiddleware func(ResponseWriter, *Request, NextMiddlewareFunc)
 // you can use this signature to get a small performance boost.
 type GenericHandler func(ResponseWriter, *Request)
 
+// RouteOptions contain optional information that may be useful at serving time.
+// For example the RequestSchemaURL could be used to verify the Request Body is validated against the schema
+type RouteOptions struct {
+	// RequestSchemaURL is a url to the request schema that you may want to validate against in a Middleware
+	// This may be a URL to a local file using the file:// scheme
+	RequestSchemaURL *url.URL
+
+	// ResponseSchemaURL is a url to the response schema that you may want to validate against in a Middleware
+	// This may be a URL to a local file using the file:// scheme
+	ResponseSchemaURL *url.URL
+
+	// Data is a dictionary of extra data that may be useful to check against
+	Data map[string]interface{}
+}
+
 type route struct {
 	Router  *Router
 	Method  httpMethod
 	Path    string
 	Handler *actionHandler
+	options RouteOptions
 }
 
 type middlewareHandler struct {
@@ -183,46 +200,55 @@ func (r *Router) OptionsHandler(fn interface{}) *Router {
 	return r
 }
 
+// GetPathPrefix return the path prefix for debug purposes
+func (r Router) PathPrefix() string {
+	return r.pathPrefix
+}
+
 // Get will add a route to the router that matches on GET requests and the specified path.
-func (r *Router) Get(path string, fn interface{}) *Router {
-	return r.addRoute(httpMethodGet, path, fn)
+func (r *Router) Get(path string, fn interface{}, options ...RouteOptions) *Router {
+	return r.addRoute(httpMethodGet, path, fn, options...)
 }
 
 // Post will add a route to the router that matches on POST requests and the specified path.
-func (r *Router) Post(path string, fn interface{}) *Router {
-	return r.addRoute(httpMethodPost, path, fn)
+func (r *Router) Post(path string, fn interface{}, options ...RouteOptions) *Router {
+	return r.addRoute(httpMethodPost, path, fn, options...)
 }
 
 // Put will add a route to the router that matches on PUT requests and the specified path.
-func (r *Router) Put(path string, fn interface{}) *Router {
-	return r.addRoute(httpMethodPut, path, fn)
+func (r *Router) Put(path string, fn interface{}, options ...RouteOptions) *Router {
+	return r.addRoute(httpMethodPut, path, fn, options...)
 }
 
 // Delete will add a route to the router that matches on DELETE requests and the specified path.
-func (r *Router) Delete(path string, fn interface{}) *Router {
-	return r.addRoute(httpMethodDelete, path, fn)
+func (r *Router) Delete(path string, fn interface{}, options ...RouteOptions) *Router {
+	return r.addRoute(httpMethodDelete, path, fn, options...)
 }
 
 // Patch will add a route to the router that matches on PATCH requests and the specified path.
-func (r *Router) Patch(path string, fn interface{}) *Router {
-	return r.addRoute(httpMethodPatch, path, fn)
+func (r *Router) Patch(path string, fn interface{}, options ...RouteOptions) *Router {
+	return r.addRoute(httpMethodPatch, path, fn, options...)
 }
 
 // Head will add a route to the router that matches on HEAD requests and the specified path.
-func (r *Router) Head(path string, fn interface{}) *Router {
-	return r.addRoute(httpMethodHead, path, fn)
+func (r *Router) Head(path string, fn interface{}, options ...RouteOptions) *Router {
+	return r.addRoute(httpMethodHead, path, fn, options...)
 }
 
 // Options will add a route to the router that matches on OPTIONS requests and the specified path.
-func (r *Router) Options(path string, fn interface{}) *Router {
-	return r.addRoute(httpMethodOptions, path, fn)
+func (r *Router) Options(path string, fn interface{}, options ...RouteOptions) *Router {
+	return r.addRoute(httpMethodOptions, path, fn, options...)
 }
 
-func (r *Router) addRoute(method httpMethod, path string, fn interface{}) *Router {
+func (r *Router) addRoute(method httpMethod, path string, fn interface{}, options ...RouteOptions) *Router {
+	opts := RouteOptions{}
+	if len(options) > 0 {
+		opts = options[0]
+	}
 	vfn := reflect.ValueOf(fn)
 	validateHandler(vfn, r.contextType)
 	fullPath := appendPath(r.pathPrefix, path)
-	route := &route{Method: method, Path: fullPath, Router: r}
+	route := &route{Method: method, Path: fullPath, Router: r, options: opts}
 	if vfn.Type().NumIn() == 2 {
 		route.Handler = &actionHandler{Generic: true, GenericHandler: fn.(func(ResponseWriter, *Request))}
 	} else {

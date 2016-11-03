@@ -34,3 +34,8 @@ func (r *Request) RoutePath() string {
 	}
 	return ""
 }
+
+// RouteOptions returns the RouteOptions that were given during route setup
+func (r *Request) RouteOptions() RouteOptions {
+	return r.route.options
+}
