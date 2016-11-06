@@ -2,7 +2,9 @@ package web
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 )
@@ -21,12 +23,16 @@ type ResponseWriter interface {
 	Written() bool
 	// Size returns the size in bytes of the body written so far.
 	Size() int
+	// Body returns a copy of the response body written so far.
+	Body() ([]byte, error)
 }
 
 type appResponseWriter struct {
 	http.ResponseWriter
 	statusCode int
 	size       int
+
+	body io.ReadWriter
 }
 
 // Don't need this yet because we get it for free:
@@ -34,7 +40,15 @@ func (w *appResponseWriter) Write(data []byte) (n int, err error) {
 	if w.statusCode == 0 {
 		w.statusCode = http.StatusOK
 	}
-	size, err := w.ResponseWriter.Write(data)
+	// Store a copy of the data in the body
+	// to run through validation later
+	if w.body == nil {
+		w.body = bytes.NewBuffer(data)
+	} else {
+		_, err = w.body.Write(data)
+	}
+	var size int
+	size, err = w.ResponseWriter.Write(data)
 	w.size += size
 	return size, err
 }
@@ -54,6 +68,16 @@ func (w *appResponseWriter) Written() bool {
 
 func (w *appResponseWriter) Size() int {
 	return w.size
+}
+
+func (w *appResponseWriter) Body() ([]byte, error) {
+	if w.body == nil {
+		return nil, io.EOF
+	}
+	var b []byte = make([]byte, w.Size())
+	_, err := w.body.Read(b)
+	w.body = bytes.NewBuffer(b)
+	return b, err
 }
 
 func (w *appResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
